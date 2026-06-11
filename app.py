@@ -5,34 +5,97 @@ import rasterio
 from rasterio.enums import Resampling
 import io
 
-# --- TAMPILAN ANTARMUKA WEB ---
+# --- PENGATURAN HALAMAN ---
 st.set_page_config(page_title="LST Mapper Pro Lite", layout="wide", page_icon="🌍")
 
-st.title("🌍 Proyek LST Mapper - Pemroses Suhu Landsat")
-st.write("Versi Komputasi Ringan Aman Server Cloud. Dirancang untuk memproses citra tanpa merusak memori RAM.")
+# --- MENYUNTIKKAN CSS KUSTOM (HTML/CSS) ---
+st.markdown("""
+    <style>
+    /* Mengubah font dan latar belakang utama */
+    @import url('https://googleapis.com');
+    
+    html, body, [data-testid="stAppViewContainer"] {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8fafc;
+    }
+    
+    /* Desain Header Utama Bergradasi */
+    .header-container {
+        background: linear-gradient(135deg, #1e3a8a 0%, #0d9488 100%);
+        padding: 2.5rem;
+        border-radius: 16px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    .header-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: #ffffff !important;
+    }
+    .header-subtitle {
+        font-size: 1.1rem;
+        font-weight: 300;
+        opacity: 0.9;
+    }
+    
+    /* Desain Kartu (Cards) untuk Input dan Output */
+    .custom-card {
+        background-color: #ffffff;
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        margin-bottom: 1.5rem;
+    }
+    
+    /* Label Judul Section */
+    .section-title {
+        color: #0f172a;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- HEADER WEB (HTML + CSS GRADIENT) ---
+st.markdown("""
+    <div class="header-container">
+        <div class="header-title">🌍 LST Mapper Pro — Cloud Edition</div>
+        <div class="header-subtitle">Sistem Komputasi Spasial Ekstraksi Land Surface Temperature (LST) Berbasis Citra Satelit Landsat Level-1</div>
+    </div>
+""", unsafe_allow_html=True)
+
+# --- AREA INPUT DATA (KARTU PUTIH CSS) ---
+st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+st.markdown('<div class="section-title">📥 Konfigurasi Sensor & Unggah Berkas Citra</div>', unsafe_allow_html=True)
 
 # Pilihan Satelit untuk Konstanta Kalibrasi
 satelit = st.selectbox("Pilih Jenis Satelit Landsat:", ["Landsat 8", "Landsat 9", "Landsat 7"])
 
-st.subheader("📥 Unggah Berkas Citra (Format .TIF)")
 col1, col2, col3 = st.columns(3)
-
 with col1:
     b10_file = st.file_uploader("Unggah Band 10 (Thermal) *Wajib*", type=["tif", "tiff"])
 with col2:
-    b4_file = st.file_uploader("Unggah Band 4 (Red) *Opsional*", type=["tif", "tiff"])
+    b4_file = st.file_uploader("Unggah Band 4 (Red) *Opsional untuk NDVI*", type=["tif", "tiff"])
 with col3:
-    b5_file = st.file_uploader("Unggah Band 5 (NIR) *Opsional*", type=["tif", "tiff"])
+    b5_file = st.file_uploader("Unggah Band 5 (NIR) *Opsional untuk NDVI*", type=["tif", "tiff"])
 
-# Tombol Eksekusi
-if st.button("🔥 PROSES DATA LST", type="primary"):
+st.markdown('</div>', unsafe_allow_html=True)
+
+# --- TOMBOL EKSEKUSI ---
+if st.button("🔥 PROSES DATA LST", type="primary", use_container_width=True):
     if b10_file is not None:
-        with st.spinner("Mengompresi matriks piksel dan menghitung suhu..."):
+        with st.spinner("Menjalankan komputasi matriks piksel aman RAM..."):
             try:
-                # --- MEMBACA FILE DENGAN RASTERIO DOWNSAMPLING (AMAN MEMORI) ---
+                # --- MEMBACA FILE DENGAN RASTERIO DOWNSAMPLING ---
                 with rasterio.open(b10_file) as src_meta:
                     meta_asli = src_meta.meta.copy()
-                    # Ambil contoh 1 sampel setiap 15 piksel agar RAM hemat 95%
                     t_height = int(src_meta.height / 15)
                     t_width = int(src_meta.width / 15)
                     
@@ -55,78 +118,79 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                     K2 = 1282.71
                 
                 # --- PROSES RUMUS MATEMATIKA ---
-                # 1. DN ke Radiance
                 radiance = (M_L * b10) + A_L
                 radiance[radiance <= 0] = 0.001 
-                
-                # 2. Radiance ke Brightness Temperature (Kelvin)
                 kelvin = K2 / np.log((K1 / radiance) + 1)
                 
-                # 3. Proses NDVI & Emisivitas jika ada Band 4 & 5
                 if b4_file is not None and b5_file is not None:
                     with rasterio.open(b4_file) as src4:
                         b4 = src4.read(1, out_shape=(t_height, t_width), resampling=Resampling.bilinear).astype('float64')
                     with rasterio.open(b5_file) as src5:
                         b5 = src5.read(1, out_shape=(t_height, t_width), resampling=Resampling.bilinear).astype('float64')
                     
-                    # Rumus Kerapatan Tanaman (NDVI)
                     ndvi = (b5 - b4) / (b5 + b4 + 1e-10)
                     ndvi_min, ndvi_max = np.nanmin(ndvi), np.nanmax(ndvi)
                     
-                    # Rumus Proporsi Vegetasi & Emisivitas
                     Pv = ((ndvi - ndvi_min) / (ndvi_max - ndvi_min + 1e-10)) ** 2
                     emissivity = 0.004 * Pv + 0.986
                     
-                    # Rumus LST Celcius Akhir
                     lambda_wave = 10.8
                     rho = 14388
                     lst_celcius = (kelvin / (1 + (lambda_wave * kelvin / rho) * np.log(emissivity))) - 273.15
-                    metode_text = "Metode Koreksi Emisivitas NDVI"
+                    metode_text = "Metode Koreksi Emisivitas NDVI (Sobrino 2004)"
                 else:
                     lst_celcius = kelvin - 273.15
                     metode_text = "Metode Brightness Temperature Standar"
                 
-                # Pembersihan data anomali lingkungan / awan ekstrem
+                # Data Cleaning
                 lst_celcius[lst_celcius < -10] = np.nan
                 lst_celcius[lst_celcius > 60] = np.nan
                 
-                # --- OUTPUT STATISTIK ---
+                # --- AREA OUTPUT DATA ---
+                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
                 st.success(f"Pemrosesan Sukses Menggunakan {metode_text}!")
                 
-                s_min = np.nanmin(lst_celcius)
-                s_max = np.nanmax(lst_celcius)
-                s_mean = np.nanmean(lst_celcius)
-                s_med = np.nanmedian(lst_celcius)
+                # Tampilkan Angka Statistik
+                s_min, s_max = np.nanmin(lst_celcius), np.nanmax(lst_celcius)
+                s_mean, s_med = np.nanmean(lst_celcius), np.nanmedian(lst_celcius)
                 
                 stat1, stat2, stat3, stat4 = st.columns(4)
-                stat1.metric("Suhu Terendah", f"{s_min:.1f} °C")
-                stat2.metric("Suhu Tertinggi", f"{s_max:.1f} °C")
-                stat3.metric("Rata-rata", f"{s_mean:.1f} °C")
-                stat4.metric("Nilai Tengah", f"{s_med:.1f} °C")
+                stat1.metric("Suhu Minimum", f"{s_min:.1f} °C")
+                stat2.metric("Suhu Maksimum", f"{s_max:.1f} °C")
+                stat3.metric("Rata-rata Wilayah", f"{s_mean:.1f} °C")
+                stat4.metric("Nilai Tengah (Median)", f"{s_med:.1f} °C")
+                st.markdown('</div>', unsafe_allow_html=True)
                 
-                # --- VISUALISASI GRAFIK ---
+                # Tampilkan Visualisasi Grafik
+                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
                 out_col1, out_col2 = st.columns(2)
                 
                 with out_col1:
-                    st.subheader("🗺️ Peta LST")
-                    fig_map, ax_map = plt.subplots(figsize=(5, 4))
+                    st.markdown('<div class="section-title">🗺️ Visualisasi Spasial Peta LST</div>', unsafe_allow_html=True)
+                    fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
+                    fig_map.patch.set_facecolor('#ffffff')
                     im = ax_map.imshow(lst_celcius, cmap='jet')
-                    plt.colorbar(im, ax=ax_map, label="Suhu (°C)")
+                    cb = plt.colorbar(im, ax=ax_map, orientation='horizontal', pad=0.05)
+                    cb.set_label("Suhu Permukaan Bumi (°C)", fontsize=10)
                     ax_map.axis('off')
                     st.pyplot(fig_map)
                     
                 with out_col2:
-                    st.subheader("📊 Histogram Piksel")
-                    fig_hist, ax_hist = plt.subplots(figsize=(5, 3.5))
-                    ax_hist.hist(lst_celcius[~np.isnan(lst_celcius)], bins=30, color='darkred', alpha=0.7)
-                    ax_hist.set_xlabel("Suhu (°C)")
-                    ax_hist.set_ylabel("Jumlah")
+                    st.markdown('<div class="section-title">📊 Grafik Distribusi Frekuensi Piksel</div>', unsafe_allow_html=True)
+                    fig_hist, ax_hist = plt.subplots(figsize=(6, 4.2))
+                    fig_hist.patch.set_facecolor('#ffffff')
+                    ax_hist.hist(lst_celcius[~np.isnan(lst_celcius)], bins=35, color='#0d9488', alpha=0.8, edgecolor='#ffffff')
+                    ax_hist.set_xlabel("Rentang Suhu (°C)", fontsize=10)
+                    ax_hist.set_ylabel("Jumlah Piksel Terdeteksi", fontsize=10)
+                    ax_hist.grid(axis='y', linestyle='--', alpha=0.5)
                     st.pyplot(fig_hist)
+                st.markdown('</div>', unsafe_allow_html=True)
                 
-                # --- FITUR DOWNLOAD GEOTIFF BERKOORDINAT ---
-                st.subheader("💾 Unduh Hasil Data Spasial")
+                # --- BUTTON DOWNLOAD GEOTIFF ---
+                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+                st.markdown('<div class="section-title">💾 Ekspor Hasil Analisis Spasial</div>', unsafe_allow_html=True)
+                st.write("Unduh data hasil pemrosesan LST ini dalam format GeoTIFF berkoordinat agar dapat dianalisis lanjut di ArcGIS/QGIS tanpa merubah posisi geografis asli.")
                 
-                # Menyesuaikan bentuk dimensi koordinat pasca kompresi 15x
                 meta_asli.update({
                     "driver": "GTiff",
                     "height": lst_celcius.shape[0],
@@ -136,19 +200,18 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                     "transform": meta_asli["transform"] * meta_asli["transform"].scale(15, 15)
                 })
                 
-                # Menulis berkas spasial langsung ke RAM virtual (.TIF)
                 mem_file = io.BytesIO()
                 with rasterio.open(mem_file, 'w', **meta_asli) as dst:
                     dst.write(lst_celcius.astype('float32'), 1)
                 
-                # Membuat Tombol Unduh Spasial
                 st.download_button(
-                    label="🌍 Unduh Hasil LST Format GeoTIFF (.TIF dengan Koordinat)",
+                    label="🌍 UNDUH DATA LST (GEOTIFF .TIF)",
                     data=mem_file.getvalue(),
                     file_name="Hasil_LST_Berkoordinat.tif",
                     mime="image/tiff",
-                    type="primary"
+                    use_container_width=True
                 )
+                st.markdown('</div>', unsafe_allow_html=True)
                     
             except Exception as e:
                 st.error(f"Gagal memproses berkas citra: {e}")
