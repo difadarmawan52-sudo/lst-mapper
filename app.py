@@ -9,7 +9,7 @@ import io
 st.set_page_config(page_title="LST Mapper Pro Lite", layout="wide", page_icon="🌍")
 
 st.title("🌍 Proyek LST Mapper - Pemroses Suhu Landsat")
-st.write("Versi Komputasi Ringan Aman Server Cloud. Dirancang untuk memproses citra tanpa merusak memori RAM.")
+st.write("landsat to LST.")
 
 # Pilihan Satelit untuk Konstanta Kalibrasi
 satelit = st.selectbox("Pilih Jenis Satelit Landsat:", ["Landsat 8", "Landsat 9", "Landsat 7"])
