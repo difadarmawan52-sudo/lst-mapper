@@ -1,15 +1,15 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image
-import rasterio 
+import rasterio
+from rasterio.enums import Resampling
 import io
 
 # --- TAMPILAN ANTARMUKA WEB ---
 st.set_page_config(page_title="LST Mapper Pro Lite", layout="wide", page_icon="🌍")
 
 st.title("🌍 Proyek LST Mapper - Pemroses Suhu Landsat")
-st.write("landsat to LST.")
+st.write("Versi Komputasi Ringan Aman Server Cloud. Dirancang untuk memproses citra tanpa merusak memori RAM.")
 
 # Pilihan Satelit untuk Konstanta Kalibrasi
 satelit = st.selectbox("Pilih Jenis Satelit Landsat:", ["Landsat 8", "Landsat 9", "Landsat 7"])
@@ -29,14 +29,20 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
     if b10_file is not None:
         with st.spinner("Mengompresi matriks piksel dan menghitung suhu..."):
             try:
-                # --- MEMBACA FILE DENGAN METODE MEMORI AMAN (PILLOW) ---
-                img10 = Image.open(b10_file)
+                # --- MEMBACA FILE DENGAN RASTERIO DOWNSAMPLING (AMAN MEMORI) ---
+                with rasterio.open(b10_file) as src_meta:
+                    meta_asli = src_meta.meta.copy()
+                    # Ambil contoh 1 sampel setiap 15 piksel agar RAM hemat 95%
+                    t_height = int(src_meta.height / 15)
+                    t_width = int(src_meta.width / 15)
+                    
+                    b10 = src_meta.read(
+                        1,
+                        out_shape=(t_height, t_width),
+                        resampling=Resampling.bilinear
+                    ).astype('float64')
                 
-                # Lakukan Downsampling instan (mengambil 1 sampel setiap 15 piksel)
-                b10_full = np.array(img10, dtype=np.float64)
-                b10 = b10_full[::15, ::15] 
-                
-                # Konstanta Kalibrasi Standar
+                # Konstanta Kalibrasi Standar Satelit
                 if satelit in ["Landsat 8", "Landsat 9"]:
                     M_L = 0.0003342
                     A_L = 0.1
@@ -51,8 +57,6 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                 # --- PROSES RUMUS MATEMATIKA ---
                 # 1. DN ke Radiance
                 radiance = (M_L * b10) + A_L
-                
-                # Mencegah nilai nol atau negatif agar tidak terjadi error logaritma
                 radiance[radiance <= 0] = 0.001 
                 
                 # 2. Radiance ke Brightness Temperature (Kelvin)
@@ -60,11 +64,10 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                 
                 # 3. Proses NDVI & Emisivitas jika ada Band 4 & 5
                 if b4_file is not None and b5_file is not None:
-                    img4 = Image.open(b4_file)
-                    img5 = Image.open(b5_file)
-                    
-                    b4 = np.array(img4, dtype=np.float64)[::15, ::15]
-                    b5 = np.array(img5, dtype=np.float64)[::15, ::15]
+                    with rasterio.open(b4_file) as src4:
+                        b4 = src4.read(1, out_shape=(t_height, t_width), resampling=Resampling.bilinear).astype('float64')
+                    with rasterio.open(b5_file) as src5:
+                        b5 = src5.read(1, out_shape=(t_height, t_width), resampling=Resampling.bilinear).astype('float64')
                     
                     # Rumus Kerapatan Tanaman (NDVI)
                     ndvi = (b5 - b4) / (b5 + b4 + 1e-10)
@@ -80,11 +83,10 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                     lst_celcius = (kelvin / (1 + (lambda_wave * kelvin / rho) * np.log(emissivity))) - 273.15
                     metode_text = "Metode Koreksi Emisivitas NDVI"
                 else:
-                    # Tanpa vegetasi menggunakan konversi standar Celcius
                     lst_celcius = kelvin - 273.15
                     metode_text = "Metode Brightness Temperature Standar"
                 
-                # Pembersihan data anomali / tepi citra luar angkasa
+                # Pembersihan data anomali lingkungan / awan ekstrem
                 lst_celcius[lst_celcius < -10] = np.nan
                 lst_celcius[lst_celcius > 60] = np.nan
                 
@@ -120,31 +122,26 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                     ax_hist.set_xlabel("Suhu (°C)")
                     ax_hist.set_ylabel("Jumlah")
                     st.pyplot(fig_hist)
-                                    # --- FITUR DOWNLOAD GEOTIFF (MEMPERTAHANKAN KOORDINAT) ---
+                
+                # --- FITUR DOWNLOAD GEOTIFF BERKOORDINAT ---
                 st.subheader("💾 Unduh Hasil Data Spasial")
                 
-                # Membaca metadata spasial asli dari file input menggunakan rasterio
-                with rasterio.open(b10_file) as src_meta:
-                    meta_asli = src_meta.meta.copy()
-                
-                # Menyesuaikan ukuran metadata dengan hasil downsampling kita (1/15)
-                # Agar ukuran baris dan kolom matriks baru pas dengan koordinat bumi
+                # Menyesuaikan bentuk dimensi koordinat pasca kompresi 15x
                 meta_asli.update({
                     "driver": "GTiff",
                     "height": lst_celcius.shape[0],
                     "width": lst_celcius.shape[1],
                     "dtype": "float32",
                     "count": 1,
-                    # Memperlebar ukuran piksel (resolusi) mengikuti faktor downsampling 15x
-                    "transform": src_meta.transform * src_meta.transform.scale(15, 15)
+                    "transform": meta_asli["transform"] * meta_asli["transform"].scale(15, 15)
                 })
                 
-                # Menyimpan file GeoTIFF ke dalam memori RAM sementara
+                # Menulis berkas spasial langsung ke RAM virtual (.TIF)
                 mem_file = io.BytesIO()
                 with rasterio.open(mem_file, 'w', **meta_asli) as dst:
                     dst.write(lst_celcius.astype('float32'), 1)
                 
-                # Membuat Tombol Download GeoTIFF untuk Pengguna
+                # Membuat Tombol Unduh Spasial
                 st.download_button(
                     label="🌍 Unduh Hasil LST Format GeoTIFF (.TIF dengan Koordinat)",
                     data=mem_file.getvalue(),
@@ -152,7 +149,7 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                     mime="image/tiff",
                     type="primary"
                 )
-
+                    
             except Exception as e:
                 st.error(f"Gagal memproses berkas citra: {e}")
     else:
