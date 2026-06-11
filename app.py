@@ -118,7 +118,39 @@ if st.button("🔥 PROSES DATA LST", type="primary"):
                     ax_hist.set_xlabel("Suhu (°C)")
                     ax_hist.set_ylabel("Jumlah")
                     st.pyplot(fig_hist)
-                    
+                                    # --- FITUR DOWNLOAD GEOTIFF (MEMPERTAHANKAN KOORDINAT) ---
+                st.subheader("💾 Unduh Hasil Data Spasial")
+                
+                # Membaca metadata spasial asli dari file input menggunakan rasterio
+                with rasterio.open(b10_file) as src_meta:
+                    meta_asli = src_meta.meta.copy()
+                
+                # Menyesuaikan ukuran metadata dengan hasil downsampling kita (1/15)
+                # Agar ukuran baris dan kolom matriks baru pas dengan koordinat bumi
+                meta_asli.update({
+                    "driver": "GTiff",
+                    "height": lst_celcius.shape[0],
+                    "width": lst_celcius.shape[1],
+                    "dtype": "float32",
+                    "count": 1,
+                    # Memperlebar ukuran piksel (resolusi) mengikuti faktor downsampling 15x
+                    "transform": src_meta.transform * src_meta.transform.scale(15, 15)
+                })
+                
+                # Menyimpan file GeoTIFF ke dalam memori RAM sementara
+                mem_file = io.BytesIO()
+                with rasterio.open(mem_file, 'w', **meta_asli) as dst:
+                    dst.write(lst_celcius.astype('float32'), 1)
+                
+                # Membuat Tombol Download GeoTIFF untuk Pengguna
+                st.download_button(
+                    label="🌍 Unduh Hasil LST Format GeoTIFF (.TIF dengan Koordinat)",
+                    data=mem_file.getvalue(),
+                    file_name="Hasil_LST_Berkoordinat.tif",
+                    mime="image/tiff",
+                    type="primary"
+                )
+
             except Exception as e:
                 st.error(f"Gagal memproses berkas citra: {e}")
     else:
