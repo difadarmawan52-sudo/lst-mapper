@@ -2,6 +2,8 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+import rasterio 
+import io
 
 # --- TAMPILAN ANTARMUKA WEB ---
 st.set_page_config(page_title="LST Mapper Pro Lite", layout="wide", page_icon="🌍")
