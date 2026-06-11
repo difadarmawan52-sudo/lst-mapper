@@ -218,3 +218,4 @@ if menu == "🖥️ Dashboard Utama":
                         fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
                         fig_map.patch.set_facecolor('#ffffff')
                         im = ax_map.imshow(lst_celcius, cmap='jet')
+          
