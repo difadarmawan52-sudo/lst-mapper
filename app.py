@@ -213,8 +213,10 @@ if menu == "🖥️ Dashboard Utama":
                     # Peta dan Histogram dalam Kartu Putih
                     st.markdown('<div class="premium-card">', unsafe_allow_html=True)
                     g_col1, g_col2 = st.columns(2)
+                    
                     with g_col1:
                         st.markdown('<div class="card-title">🗺️ Peta Zonasi Suhu Permukaan Bumi (LST)</div>', unsafe_allow_html=True)
                         fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
                         fig_map.patch.set_facecolor('#ffffff')
                         im = ax_map.imshow(lst_celcius, cmap='jet')
+                        fig_map.colorbar(im, ax=ax_map, label='Suhu (°C)')
