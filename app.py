@@ -214,9 +214,50 @@ if menu == "🖥️ Dashboard Utama":
                     st.markdown('<div class="premium-card">', unsafe_allow_html=True)
                     g_col1, g_col2 = st.columns(2)
                     
+                                        # Peta dan Histogram dalam Kartu Putih
+                    st.markdown('<div class="premium-card">', unsafe_allow_html=True)
+                    g_col1, g_col2 = st.columns(2)
+                    
                     with g_col1:
                         st.markdown('<div class="card-title">🗺️ Peta Zonasi Suhu Permukaan Bumi (LST)</div>', unsafe_allow_html=True)
                         fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
                         fig_map.patch.set_facecolor('#ffffff')
                         im = ax_map.imshow(lst_celcius, cmap='jet')
                         fig_map.colorbar(im, ax=ax_map, label='Suhu (°C)')
+                        ax_map.axis('off')
+                        st.pyplot(fig_map)
+                        
+                    with g_col2:
+                        st.markdown('<div class="card-title">📈 Grafik Distribusi Frekuensi Suhu</div>', unsafe_allow_html=True)
+                        fig_hist, ax_hist = plt.subplots(figsize=(6, 4.5))
+                        fig_hist.patch.set_facecolor('#ffffff')
+                        ax_hist.hist(lst_celcius[~np.isnan(lst_celcius)].flatten(), bins=30, color='#3b82f6', edgecolor='white')
+                        ax_hist.set_xlabel('Suhu Permukaan (°C)')
+                        ax_hist.set_ylabel('Jumlah Piksel')
+                        ax_hist.grid(axis='y', linestyle='--', alpha=0.7)
+                        st.pyplot(fig_hist)
+                        
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan teknis pemrosesan data: {e}")
+        else:
+            st.warning("⚠️ Mohon unggah berkas thermal Band 10 terlebih dahulu.")
+
+# ==============================================================================
+# MENU 2: TEORI PERHITUNGAN LST
+# ==============================================================================
+elif menu == "📚 Teori Perhitungan LST":
+    st.markdown('<div class="premium-card">', unsafe_allow_html=True)
+    st.markdown('<div class="card-title">📚 Dasar Teori & Alur Algoritma LST</div>', unsafe_allow_html=True)
+    st.write("Halaman ini digunakan untuk menampilkan dokumentasi ilmiah kalkulasi sensor thermal satelit Landsat.")
+    
+    st.markdown("""
+        <table class="teori-table">
+            <tr><th>Tahapan</th><th>Persamaan / Hukum Fisika</th></tr>
+            <tr><td>1. Top of Atmosphere Radiance</td><td>Lλ = ML * Qcal + AL</td></tr>
+            <tr><td>2. Brightness Temperature (Kelvin)</td><td>BT = K2 / ln((K1 / Lλ) + 1)</td></tr>
+            <tr><td>3. Koreksi Emisivitas Land Surface</td><td>LST = BT / (1 + (λ * BT / ρ) * ln(ε))</td></tr>
+        </table>
+    """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
